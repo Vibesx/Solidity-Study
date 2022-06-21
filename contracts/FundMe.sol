@@ -7,22 +7,35 @@ pragma solidity ^0.8.8;
 
 import "./PriceConverter.sol";
 
+error NotOwner();
+
 contract FundMe {
     using PriceConverter for uint256;
 
-    uint256 public minimumUsd = 50 * 1e18;
+    // constants cannot be modified (like Java) and also do not cost gas; naming convention is all caps (again like Java)
+    // constants don't take up a storage spot
+    uint256 public constant MINIMUM_USD = 50 * 1e18;
 
     address[] public funders;
     mapping (address => uint256) public addressToAmountFunded;
+
+    // immutable is similar to constant, but it doesn't require the property to be populate in the same line (ex: can be populated in a constructor or function);
+    // once it is populated, though, it cannot be changed
+    // naming convention is i_<name>
+    address public immutable i_owner;
+    
+    constructor() {
+        i_owner = msg.sender;
+    }
     
     function fund() public payable {
         // require can take a second argument that is an error message that is sent in case of failure
-        require(msg.value.getConversionRate() >= minimumUsd, "Didn't send enough!"); //1e18 == 1*10 ** 18; msg.value is in wei and 1 ether = 1 * 10^18 wei
+        require(msg.value.getConversionRate() >= MINIMUM_USD, "Didn't send enough!"); //1e18 == 1*10 ** 18; msg.value is in wei and 1 ether = 1 * 10^18 wei
         funders.push(msg.sender);
         addressToAmountFunded[msg.sender] = msg.value;
     }
 
-    function withdraw() public {
+    function withdraw() public onlyOwner {
         // reset the mapping
         for (uint256 funderIndex = 0; funderIndex < funders.length; funderIndex = funderIndex + 1) {
             address funder = funders[funderIndex];
@@ -44,7 +57,7 @@ contract FundMe {
         //require(sendSuccess, "Send failed!");
 
         // call - allows us to call methods by their name
-        // in the next example, we treat the call as a transaction by leaving the parameters blank and hardcoding the details (value)
+        // in the next example, we treat the call as a transaction by leaving the parameters blank and hardcoding the details (val ue)
         // call returns two values: a bool that stores whether the call was successfull or not and a bytes variable that stores the returned data
         // in our case, we don't need dataReturned as we aren't calling an actual function
         // as with send, we should check the success of the call with a require
@@ -53,4 +66,25 @@ contract FundMe {
 
         // currently, call is the prefered way of withdrawing tokens
     }
+
+    // _; is a placeholder for "run the rest of the code"; it can be before or after the require, or inbetween two requires; basically <operations...>; _; <otherOperations...> means that 
+    // the first operations will be executed, then the code in the method, the otherOperations
+    modifier onlyOwner {
+        //require(msg.sender == i_owner, "Sender is not owner!");
+
+        // this is similar to the require, but it uses a custom error (NotOwner) so it costs less gas (the string in the require takes up a lot of space)
+        // revert does the same thing as require does in case of failure; it can be used in any cases to revert the transaction
+        if(msg.sender != i_owner) {
+            revert NotOwner();
+        }
+        _;
+    }
+
+        receive() external payable {
+            fund();
+        }
+
+        fallback() external payable {
+            fund();
+        }
 }
